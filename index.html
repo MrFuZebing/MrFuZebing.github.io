@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>DeepSeek 智能助手</title>
+    <meta http-equiv="Content-Security-Policy" 
+          content="default-src 'self' https:; script-src 'self' https: 'unsafe-inline'; style-src 'self' https: 'unsafe-inline';">
+    <meta http-equiv="Strict-Transport-Security" 
+          content="max-age=31536000; includeSubDomains; preload">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        :root {
+            --primary-color: #28a745;
+            --hover-color: #218838;
+            --error-color: #dc3545;
+            --bg-color: #f8f9fa;
+            --text-color: #333;
+            --shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            line-height: 1.6;
+            color: var(--text-color);
+            background-color: var(--bg-color);
+        }
+
+        .auth-container {
+            max-width: 400px;
+            margin: 2rem auto;
+            padding: 2rem;
+            background: white;
+            border-radius: 12px;
+            box-shadow: var(--shadow);
+        }
+
+        .auth-form {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .auth-tabs {
+            display: flex;
+            margin-bottom: 1.5rem;
+            border-bottom: 1px solid #ddd;
+        }
+
+        .auth-tab {
+            flex: 1;
+            padding: 0.75rem;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .auth-tab.active {
+            color: var(--primary-color);
+            border-bottom: 2px solid var(--primary-color);
+        }
+
+        input, button {
+            padding: 0.75rem;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-size: 1rem;
+        }
+
+        input[type="password"] {
+            font-family: monospace;
+        }
+
+        button {
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        button:hover {
+            background-color: var(--hover-color);
+        }
+
+        .toast {
+            position: fixed;
+            top: 1rem;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            background-color: var(--primary-color);
+            color: white;
+            box-shadow: var(--shadow);
+            z-index: 1000;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        .toast.error {
+            background-color: var(--error-color);
+        }
+
+        /* 新增管理员面板样式 */
+        .admin-panel {
+            display: none;
+            max-width: 800px;
+            margin: 2rem auto;
+            padding: 2rem;
+            background: white;
+            border-radius: 12px;
+            box-shadow: var(--shadow);
+        }
+
+        .admin-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1rem;
+        }
+
+        .admin-table th, .admin-table td {
+            padding: 0.75rem;
+            border: 1px solid #ddd;
+            text-align: left;
+        }
+
+        .admin-actions {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --bg-color: #1a1a1a;
+                --text-color: #e0e0e0;
+            }
+            .auth-container {
+                background-color: #2d2d2d;
+            }
+            input, button {
+                background-color: #333;
+                color: white;
+                border-color: #444;
+            }
+            .admin-panel {
+                background-color: #2d2d2d;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- 认证界面 -->
+    <div id="authContainer" class="auth-container">
+        <div class="auth-tabs">
+            <div class="auth-tab active" onclick="switchAuthTab('login')">登录</div>
+            <div class="auth-tab" onclick="switchAuthTab('register')">注册</div>
+        </div>
+
+        <!-- 登录表单 -->
+        <form id="loginForm" class="auth-form" onsubmit="handleAuth(event, 'login')">
+            <input type="email" id="loginEmail" placeholder="邮箱" required>
+            <input type="password" id="loginPassword" placeholder="密码" required
+                   autocomplete="current-password" inputmode="text" enterkeyhint="done" autocapitalize="none">
+            <div class="two-factor-section" id="login2FA">
+                <input type="text" placeholder="两步验证码" required>
+            </div>
+            <button type="submit">登录</button>
+            <a href="#forgot" onclick="showPasswordReset()" style="text-align:center;color:var(--primary-color);">忘记密码？</a>
+        </form>
+
+        <!-- 注册表单 -->
+        <form id="registerForm" class="auth-form" style="display:none;" 
+              onsubmit="handleAuth(event, 'register')">
+            <input type="text" id="registerName" placeholder="用户名" required minlength="3">
+            <input type="email" id="registerEmail" placeholder="邮箱" required>
+            <input type="password" id="registerPassword" placeholder="密码" 
+                   pattern="^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d@$!%*#?&]{8,}$" 
+                   title="至少8个字符，包含字母和数字" required
+                   autocomplete="new-password" inputmode="text" enterkeyhint="done" autocapitalize="none">
+            <div class="two-factor-section" id="register2FA">
+                <input type="text" placeholder="短信验证码" required>
+                <button type="button" onclick="sendVerificationCode()">获取验证码</button>
+            </div>
+            <button type="submit">注册</button>
+        </form>
+
+        <!-- 密码重置表单 -->
+        <form id="resetForm" class="auth-form" style="display:none;" 
+              onsubmit="handlePasswordReset(event)">
+            <input type="email" id="resetEmail" placeholder="注册邮箱" required>
+            <div id="resetVerify" style="display:none;">
+                <input type="text" placeholder="验证码" required>
+                <input type="password" placeholder="新密码" required>
+            </div>
+            <button type="submit">发送重置链接</button>
+        </form>
+    </div>
+
+    <!-- 聊天界面容器 -->
+    <div id="chatContainer">
+        <div id="messages"></div>
+        <div class="loading" id="loading">DeepSeek正在思考中...</div>
+        <div id="inputArea">
+            <textarea id="userInput" placeholder="输入问题（Shift+Enter换行）..."></textarea>
+            <button onclick="sendMessage()">发送</button>
+        </div>
+    </div>
+
+    <!-- 管理员面板 -->
+    <div id="adminPanel" class="admin-panel">
+        <h2>管理员控制台</h2>
+        <button onclick="adminSystem.toggleUserManagement()">用户管理</button>
+        <button onclick="adminSystem.viewSystemLogs()">系统日志</button>
+        
+        <div id="userManagement" style="display:none;">
+            <table class="admin-table">
+                <thead>
+                    <tr>
+                        <th>用户名</th>
+                        <th>邮箱</th>
+                        <th>注册时间</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody id="userList"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Toast容器 -->
+    <div id="toast" class="toast"></div>
+
+    <script>
+        // 管理员配置
+        const ADMIN_CREDENTIALS = {
+            email: "hacker201329@outlook.com",
+            password: "6a8b2a5e274223c9e6d9a5a6b1e8c2f3d0a7c5e6f8b2a5d3c6e9f1a8b3d2e5",
+            salt: "a1b2c3d4e5f6"
+        };
+
+        class AdminSystem {
+            constructor() {
+                this.isAdmin = false;
+                this.users = JSON.parse(localStorage.getItem('users')) || [];
+                this.initAdminAccount();
+            }
+
+            initAdminAccount() {
+                if (!this.users.some(u => u.role === 'admin')) {
+                    this.users.push({
+                        username: "系统管理员",
+                        email: ADMIN_CREDENTIALS.email,
+                        password: ADMIN_CREDENTIALS.password,
+                        role: "admin",
+                        createdAt: new Date().toISOString()
+                    });
+                    localStorage.setItem('users', JSON.stringify(this.users));
+                }
+            }
+
+            async verifyAdmin(email, password) {
+                const user = this.users.find(u => u.email === email);
+                if (!user) return false;
+                
+                const hashedInput = await this.hashPassword(password + ADMIN_CREDENTIALS.salt);
+                if (user.password === hashedInput && user.role === "admin") {
+                    this.isAdmin = true;
+                    document.getElementById('adminPanel').style.display = 'block';
+                    return true;
+                }
+                return false;
+            }
+
+            async hashPassword(password) {
+                const encoder = new TextEncoder();
+                const data = encoder.encode(password);
+                const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+                return Array.from(new Uint8Array(hashBuffer))
+                    .map(b => b.toString(16).padStart(2, '0')).join('');
+            }
+
+            toggleUserManagement() {
+                const panel = document.getElementById('userManagement');
+                panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+                this.loadUsers();
+            }
+
+            loadUsers() {
+                this.users = JSON.parse(localStorage.getItem('users')) || [];
+                const tbody = document.getElementById('userList');
+                tbody.innerHTML = this.users.map(user => `
+                    <tr>
+                        <td>${user.username}</td>
+                        <td>${user.email}</td>
+                        <td>${new Date(user.createdAt).toLocaleString()}</td>
+                        <td>
+                            <div class="admin-actions">
+                                ${user.role !== 'admin' ? `
+                                <button onclick="adminSystem.deleteUser('${user.email}')">删除</button>
+                                <button onclick="adminSystem.resetPassword('${user.email}')">重置密码</button>
+                                ` : '系统管理员'}
+                            </div>
+                        </td>
+                    </tr>
+                `).join('');
+            }
+
+            deleteUser(email) {
+                this.users = this.users.filter(u => u.email !== email);
+                localStorage.setItem('users', JSON.stringify(this.users));
+                this.loadUsers();
+                showToast('用户已删除', 'success');
+            }
+
+            viewSystemLogs() {
+                console.log('系统日志：', JSON.parse(localStorage.getItem('logs') || '[]'));
+                showToast('日志已加载到控制台', 'info');
+            }
+        }
+
+        const adminSystem = new AdminSystem();
+
+        class AuthSystem {
+            constructor() {
+                this.currentUser = null;
+                this.authToken = null;
+                this.tokenRefreshInterval = null;
+                this.loginAttempts = new Map();
+                this.init();
+            }
+
+            init() {
+                this.checkSession();
+                this.initEventListeners();
+            }
+
+            async checkSession() {
+                const token = localStorage.getItem('authToken');
+                if (token) {
+                    try {
+                        await this.refreshToken(token);
+                    } catch (error) {
+                        this.logout();
+                    }
+                }
+            }
+
+            async refreshToken(token) {
+                const response = await fetch('/api/refresh-token', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                const data = await response.json();
+                this.handleAuthSuccess(data);
+            }
+
+            async login(credentials) {
+                try {
+                    const clientIp = await this.getClientIP();
+                    if (this.isRateLimited(clientIp)) {
+                        showToast('登录尝试过多，请稍后再试', 'error');
+                        return false;
+                    }
+
+                    // 管理员验证
+                    if (credentials.email === ADMIN_CREDENTIALS.email) {
+                        const isAdmin = await adminSystem.verifyAdmin(
+                            credentials.email,
+                            credentials.password
+                        );
+                        if (isAdmin) {
+                            showToast('管理员登录成功', 'success');
+                            return true;
+                        }
+                    }
+
+                    const response = await fetch('/api/login', {
+                        method: 'POST',
+                        headers: this.getAuthHeaders(),
+                        body: JSON.stringify({
+                            email: credentials.email,
+                            password: await this.hashPassword(credentials.password)
+                        })
+                    });
+
+                    if (response.status === 429) {
+                        const retryAfter = response.headers.get('Retry-After');
+                        showToast(`登录尝试过多，请${retryAfter}秒后再试`, 'error');
+                        return false;
+                    }
+
+                    const data = await response.json();
+                    if (data.requires2FA) {
+                        this.show2FASection();
+                        return;
+                    }
+
+                    this.handleAuthSuccess(data);
+                    return true;
+                } catch (error) {
+                    this.recordFailedAttempt(clientIp);
+                    throw error;
+                }
+            }
+
+            // 其他方法保持不变...
+        }
+
+        const authSystem = new AuthSystem();
+
+        function showToast(message, type = 'info') {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.className = `toast ${type}`;
+            toast.style.display = 'block';
+            setTimeout(() => toast.style.opacity = 1, 10);
+            setTimeout(() => {
+                toast.style.opacity = 0;
+                setTimeout(() => toast.style.display = 'none', 300);
+            }, 3000);
+        }
+
+        // HTTPS强制检测
+        if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
+            location.href = 'https:' + window.location.href.substring(window.location.protocol.length);
+        }
+    </script>
+</body>
+</html>
