@@ -97,3 +97,33 @@ app.post('/register', (req, res) => {
         }
     });
 });// 其他数据库操作...
+<form id="register-form" action="/register" method="POST">
+    <label for="username">用户名：</label>
+    <input type="text" id="username" name="username" required><br>
+    <label for="password">密码：</label>
+    <input type="password" id="password" name="password" required><br>
+    <button type="submit">注册</button>
+</form>
+db.run("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, username TEXT, password TEXT, score INTEGER)");
+// 用户注册
+app.post('/register', (req, res) => {
+    const { username, password } = req.body;
+
+    // 检查用户名是否已存在
+    db.get("SELECT * FROM users WHERE username = ?", [username], (err, row) => {
+        if (err) {
+            res.status(500).send("服务器错误");
+        } else if (row) {
+            res.status(400).send("用户名已存在");
+        } else {
+            // 插入新用户
+            db.run("INSERT INTO users (username, password, score) VALUES (?, ?, ?)", [username, password, 0], (err) => {
+                if (err) {
+                    res.status(500).send("注册失败");
+                } else {
+                    res.send("注册成功");
+                }
+            });
+        }
+    });
+});
