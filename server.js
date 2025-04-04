@@ -75,4 +75,25 @@ const db = new sqlite3.Database('./database/game.db');  // 确保路径正确
 // 创建表格
 db.run("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, username TEXT, password TEXT, score INTEGER)");
 
-// 其他数据库操作...
+// 用户注册
+app.post('/register', (req, res) => {
+    const { username, password } = req.body;
+
+    // 检查用户名是否已存在
+    db.get("SELECT * FROM users WHERE username = ?", [username], (err, row) => {
+        if (err) {
+            res.status(500).send("服务器错误");
+        } else if (row) {
+            res.status(400).send("用户名已存在");
+        } else {
+            // 插入新用户
+            db.run("INSERT INTO users (username, password, score) VALUES (?, ?, ?)", [username, password, 0], (err) => {
+                if (err) {
+                    res.status(500).send("注册失败");
+                } else {
+                    res.send("注册成功");
+                }
+            });
+        }
+    });
+});// 其他数据库操作...
