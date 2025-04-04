@@ -69,3 +69,10 @@ app.post('/game', (req, res) => {
 app.listen(3000, () => {
     console.log('服务器已启动，访问 http://localhost:3000');
 });
+const sqlite3 = require('sqlite3').verbose();
+const db = new sqlite3.Database('./database/game.db');  // 确保路径正确
+
+// 创建表格
+db.run("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, username TEXT, password TEXT, score INTEGER)");
+
+// 其他数据库操作...
